@@ -1,0 +1,30 @@
+[package]
+name = "vapx-scan"
+version = "0.1.0"
+edition = "2021"
+description = "Discover Axis network devices on the local LAN (SSDP, ONVIF, mDNS, subnet scan)."
+license = "MIT"
+repository = "https://github.com/Hex29A/vapx-scan"
+
+[[bin]]
+name = "vapx-scan"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+socket2 = "0.5"
+if-addrs = "0.13"
+ipnet = "2"
+anyhow = "1"
+thiserror = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

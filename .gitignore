@@ -1,0 +1,11 @@
+# Rust build artifacts
+/target
+/dist
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
