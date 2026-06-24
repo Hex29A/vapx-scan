@@ -107,6 +107,28 @@ make test      # run tests
 The `static` target produces a fully static `x86_64-unknown-linux-musl` binary
 that runs on any Linux host without runtime dependencies.
 
+### Raspberry Pi / ARM
+
+Cross-compiled static builds for Raspberry Pi require
+[`cross`](https://github.com/cross-rs/cross) (`cargo install cross`) and Docker:
+
+```
+make arm64    # aarch64 — Pi 3/4/5 (64-bit OS)
+make armv7    # armv7   — Pi 2/3/4 (32-bit OS)
+make armv6    # armv6   — Pi Zero / Zero W / 1
+make arm-all  # all three
+```
+
+Prebuilt binaries for all of these are attached to every
+[release](https://github.com/Hex29A/vapx-scan/releases)
+(`vapx-scan-linux-{amd64,arm64,armv7,armv6}`).
+
+> **Tip:** multicast discovery (SSDP/ONVIF/mDNS) does not cross subnet/router
+> boundaries, so cross-subnet scans are unreliable. For best results, run
+> vapx-scan **on a host in the same LAN** as the devices — e.g. a Raspberry Pi
+> on the camera subnet.
+
+
 ## Exit codes
 
 | Code | Meaning |
