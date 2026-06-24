@@ -83,3 +83,4 @@ jobs:
           generate_release_notes: true
           files: |
             dist/vapx-scan-linux-*
+            dist/vapx-scan-*-linux-*.tar.gz
