@@ -82,6 +82,17 @@ All methods run in parallel. Results are deduplicated by IP and sorted.
 > interface and sets `IP_MULTICAST_IF`, making discovery more reliable on
 > multi-homed hosts.
 
+> **Note on detection accuracy:** vapx-scan tightens the Axis-detection
+> heuristics compared to the Go original to avoid false positives:
+> - The `basicdeviceinfo.cgi` GET fallback only confirms a `200` response when
+>   the body carries a real VAPIX signature (`apiVersion`, `propertyList`,
+>   `SerialNumber`, …) instead of any incidental "AXIS" substring. This stops
+>   generic always-`200` web apps from being misidentified.
+> - HTTP body markers require Axis-specific strings (`Axis Communications`,
+>   `axis-cgi`, `vapix`) or a genuine product-name pattern (`AXIS <model>`,
+>   e.g. `AXIS Q1615`) rather than the bare token `AXIS`, which matched things
+>   like `axis.ui.css` or an app named "Axis Music".
+
 ## Building
 
 Requires a stable Rust toolchain.

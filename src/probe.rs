@@ -159,8 +159,9 @@ pub async fn get_device_info(ip: &str, port: u16) -> DeviceInfo {
 }
 
 /// Probes `/axis-cgi/basicdeviceinfo.cgi` with GET for legacy Axis detection.
-/// A 200 or 401 response is treated as a strong Axis signal; a 200 whose body
-/// lacks Axis markers is rejected (generic always-200 servers).
+/// A 401 response is treated as a strong Axis signal (the endpoint exists but
+/// requires auth); a 200 is only accepted when the body carries a genuine
+/// VAPIX signature, rejecting generic always-200 servers.
 pub async fn axis_cgi(ip: &str, port: u16) -> AxisCgiResult {
     let url = format!(
         "{}://{}:{}/axis-cgi/basicdeviceinfo.cgi",
@@ -175,26 +176,46 @@ pub async fn axis_cgi(ip: &str, port: u16) -> AxisCgiResult {
         Err(_) => return AxisCgiResult::default(),
     };
     let status_code = resp.status().as_u16();
-    let mut result = AxisCgiResult {
-        is_axis: status_code == 200 || status_code == 401,
-        status_code,
-    };
 
-    if status_code == 200 {
-        let body = resp
-            .bytes()
+    // Only the 200 path needs a body inspection.
+    let body = if status_code == 200 {
+        resp.bytes()
             .await
             .map(|b| {
                 let slice = &b[..b.len().min(MAX_BODY_READ)];
                 String::from_utf8_lossy(slice).to_string()
             })
-            .unwrap_or_default();
-        let upper = body.to_uppercase();
-        if !upper.contains("AXIS") && !upper.contains("BASICDEVICEINFO") {
-            result.is_axis = false;
-        }
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    AxisCgiResult {
+        is_axis: axis_cgi_confirms(status_code, &body),
+        status_code,
     }
-    result
+}
+
+/// Decides whether a `basicdeviceinfo.cgi` GET response confirms an Axis device.
+///
+/// A 401 confirms (Axis-specific path requiring auth). A 200 confirms only when
+/// the body looks like a genuine VAPIX JSON envelope — checking for actual API
+/// keys rather than the bare substring "AXIS", which previously matched
+/// incidental strings (e.g. `axis.ui.css`) on non-Axis web servers.
+fn axis_cgi_confirms(status_code: u16, body: &str) -> bool {
+    if status_code == 401 {
+        return true;
+    }
+    if status_code != 200 {
+        return false;
+    }
+    let upper = body.to_uppercase();
+    upper.contains("BASICDEVICEINFO")
+        || upper.contains("\"APIVERSION\"")
+        || upper.contains("\"PROPERTYLIST\"")
+        || upper.contains("\"SERIALNUMBER\"")
+        || upper.contains("\"PRODNBR\"")
+        || upper.contains("\"PRODFULLNAME\"")
 }
 
 /// Fetches `/webapp/index.shtml` and extracts the `<title>` tag. Axis devices
@@ -218,16 +239,44 @@ pub async fn webapp_title(ip: &str, port: u16) -> String {
     extract_title(&String::from_utf8_lossy(slice))
 }
 
-/// Strings we look for in a response body to identify Axis devices.
-const AXIS_MARKERS: &[&str] = &["AXIS", "Axis Communications", "axis-cgi"];
+/// Strong, Axis-specific strings to look for in an HTTP response body.
+///
+/// The bare token "AXIS" (present in the Go original) was intentionally
+/// dropped: it matches incidental strings like `axis.ui.css`, `x-axis`, or
+/// apps merely named "...Axis...", producing false positives. Product-name
+/// detection is handled separately by [`has_axis_product_name`].
+const AXIS_MARKERS: &[&str] = &["Axis Communications", "axis-cgi", "vapix"];
 
 fn scan_markers(body: &str) -> Vec<String> {
     let upper = body.to_uppercase();
-    AXIS_MARKERS
+    let mut found: Vec<String> = AXIS_MARKERS
         .iter()
         .filter(|m| upper.contains(&m.to_uppercase()))
         .map(|m| m.to_string())
-        .collect()
+        .collect();
+    if has_axis_product_name(&upper) {
+        found.push("AXIS product".to_string());
+    }
+    found
+}
+
+/// Detects an Axis product name of the form `AXIS <model>`, where the model
+/// token begins with a letter immediately followed by a digit (e.g. "Q1615",
+/// "P5654", "M3088", "A1210"). This distinguishes genuine product names from
+/// incidental phrases such as "Axis Music" or "Axis Communications".
+///
+/// `upper` must already be upper-cased.
+fn has_axis_product_name(upper: &str) -> bool {
+    for (idx, _) in upper.match_indices("AXIS ") {
+        let rest = &upper[idx + "AXIS ".len()..];
+        let mut chars = rest.chars();
+        if let (Some(a), Some(b)) = (chars.next(), chars.next()) {
+            if a.is_ascii_uppercase() && b.is_ascii_digit() {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Extracts the content of the first `<title>...</title>` tag. Returns empty
@@ -291,10 +340,54 @@ mod tests {
     }
 
     #[test]
-    fn scan_markers_finds_axis() {
-        let m = scan_markers("<html>AXIS Communications axis-cgi</html>");
-        assert!(m.contains(&"AXIS".to_string()));
+    fn scan_markers_finds_specific_axis() {
+        let m = scan_markers("<html>Axis Communications axis-cgi AXIS Q1615</html>");
+        assert!(m.contains(&"Axis Communications".to_string()));
         assert!(m.contains(&"axis-cgi".to_string()));
+        assert!(m.contains(&"AXIS product".to_string()));
+    }
+
+    #[test]
+    fn scan_markers_ignores_incidental_axis() {
+        // A non-Axis web app that merely references "axis.ui.css" or is named
+        // "Axis Music" must NOT yield any marker (regression for the
+        // 192.168.8.21 false positive).
+        let m = scan_markers(r#"<link href="/axis.ui.css"><title>Axis Music</title>"#);
+        assert!(m.is_empty(), "expected no markers, got {:?}", m);
+    }
+
+    #[test]
+    fn product_name_pattern() {
+        assert!(has_axis_product_name("AXIS Q1615 NETWORK CAMERA"));
+        assert!(has_axis_product_name("AXIS P5654-E"));
+        assert!(has_axis_product_name("AXIS A1210"));
+        // Not product names:
+        assert!(!has_axis_product_name("AXIS MUSIC"));
+        assert!(!has_axis_product_name("AXIS COMMUNICATIONS"));
+        assert!(!has_axis_product_name("AXIS OS"));
+    }
+
+    #[test]
+    fn axis_cgi_confirmation_rules() {
+        // 401 on the Axis-specific path confirms.
+        assert!(axis_cgi_confirms(401, ""));
+        // 200 with a genuine VAPIX envelope confirms.
+        assert!(axis_cgi_confirms(
+            200,
+            r#"{"apiVersion":"1.3","data":{"propertyList":{"ProdNbr":"Q1615"}}}"#
+        ));
+        assert!(axis_cgi_confirms(
+            200,
+            r#"{"data":{"SerialNumber":"ACCC8E.."}}"#
+        ));
+        // 200 from a generic always-200 server that merely contains "axis"
+        // must NOT confirm.
+        assert!(!axis_cgi_confirms(
+            200,
+            r#"<html><link href="/axis.ui.css"><title>Axis Music</title></html>"#
+        ));
+        // Other statuses never confirm.
+        assert!(!axis_cgi_confirms(404, "BASICDEVICEINFO"));
     }
 
     #[test]
