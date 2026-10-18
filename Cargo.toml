@@ -1,6 +1,6 @@
 [package]
 name = "vapx-scan"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 description = "Discover Axis network devices on the local LAN (SSDP, ONVIF, mDNS, subnet scan)."
 license = "MIT"
