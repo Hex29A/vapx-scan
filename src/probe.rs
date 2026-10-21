@@ -351,7 +351,7 @@ mod tests {
     fn scan_markers_ignores_incidental_axis() {
         // A non-Axis web app that merely references "axis.ui.css" or is named
         // "Axis Music" must NOT yield any marker (regression for the
-        // 192.168.8.21 false positive).
+        // earlier false positive).
         let m = scan_markers(r#"<link href="/axis.ui.css"><title>Axis Music</title>"#);
         assert!(m.is_empty(), "expected no markers, got {:?}", m);
     }
