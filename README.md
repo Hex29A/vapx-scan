@@ -22,10 +22,10 @@ Running without flags discovers Axis devices on all local subnets:
 $ vapx-scan
 URL                    PRODUCT                           FIRMWARE   SERIAL
 ─────────────────────  ────────────────────────────────  ─────────  ────────────
-http://192.168.7.10/   AXIS Q1615 Mk III Network Camera  12.6.104   B8A44F230E2A
-http://192.168.7.16/   AXIS Q1647 Network Camera         11.11.181  ACCC8E98AD9B
-http://192.168.7.70/   AXIS D2123-VE Radar               12.8.54    E8272513046C
-http://192.168.7.155/  AXIS IO Manager                   —          ac:cc:8e:d1:36:8b
+http://192.0.2.10/     AXIS Q1615 Mk III Network Camera  12.6.104   00A1B2C3D4E1
+http://192.0.2.16/     AXIS Q1647 Network Camera         11.11.181  00A1B2C3D4E2
+http://192.0.2.70/     AXIS D2123-VE Radar               12.8.54    00A1B2C3D4E3
+http://192.0.2.155/    AXIS IO Manager                   —          00A1B2C3D4E4
 ```
 
 ### Flags
